@@ -117,26 +117,38 @@ export function AudioSetsGrid() {
                   <p className="text-xs text-muted-foreground mt-2 italic">{set.note}</p>
                 )}
               </div>
-              <Button 
-                className="w-full" 
-                size="lg"
-                onClick={() => {
-                  // Scroll to contact and add set parameter
-                  const contactSection = document.getElementById("contact")
-                  if (contactSection) {
-                    // Update URL with set parameter
-                    const url = new URL(window.location.href)
-                    url.searchParams.set("set", set.id)
-                    window.history.pushState({}, "", url.toString())
-                    // Scroll to contact section
-                    contactSection.scrollIntoView({ behavior: "smooth", block: "start" })
-                    // Trigger a custom event to notify the inquiry form
-                    window.dispatchEvent(new CustomEvent("setSelected", { detail: { setId: set.id } }))
-                  }
-                }}
-              >
-                Inquire Now
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  size="lg"
+                  onClick={() => {
+                    window.location.href = `/sets/${set.id}`
+                  }}
+                >
+                  View Details
+                </Button>
+                <Button
+                  className="flex-1"
+                  size="lg"
+                  onClick={() => {
+                    // Scroll to contact and add set parameter
+                    const contactSection = document.getElementById("contact")
+                    if (contactSection) {
+                      // Update URL with set parameter
+                      const url = new URL(window.location.href)
+                      url.searchParams.set("set", set.id)
+                      window.history.pushState({}, "", url.toString())
+                      // Scroll to contact section
+                      contactSection.scrollIntoView({ behavior: "smooth", block: "start" })
+                      // Trigger a custom event to notify the inquiry form
+                      window.dispatchEvent(new CustomEvent("setSelected", { detail: { setId: set.id } }))
+                    }
+                  }}
+                >
+                  Inquire Now
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
