@@ -3,10 +3,12 @@ import { AudioSetsGrid } from "@/components/audio-sets-grid"
 import { FeaturesSection } from "@/components/features-section"
 import { InquirySection } from "@/components/inquiry-section"
 import { Footer } from "@/components/footer"
+import { StickyNav } from "@/components/sticky-nav"
 
 export default function Home() {
   return (
     <main className="min-h-screen bg-background">
+      <StickyNav />
       <HeroSection />
 
       <section id="equipment" className="py-24 px-4 bg-background">

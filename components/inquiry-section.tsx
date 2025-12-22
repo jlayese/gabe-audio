@@ -53,7 +53,7 @@ export function InquirySection() {
   }
 
   return (
-    <section className="py-24 px-4 bg-secondary">
+    <section id="contact" className="py-24 px-4 bg-secondary">
       <div className="max-w-2xl mx-auto">
         <Card className="bg-card border-border">
           <CardHeader className="text-center">
