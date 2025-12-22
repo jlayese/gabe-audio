@@ -19,6 +19,8 @@ interface AudioSet {
   price: number
   image: string
   equipment: Equipment[]
+  duration?: string
+  note?: string
 }
 
 export function AudioSetsGrid() {
@@ -102,10 +104,19 @@ export function AudioSetsGrid() {
 
             {/* Pricing */}
             <div className="border-t border-border pt-4">
-              <p className="text-3xl font-bold text-accent mb-4">
-                ${set.price}
-                <span className="text-xs font-normal text-muted-foreground">/day</span>
-              </p>
+              <div className="mb-4">
+                <p className="text-3xl font-bold text-accent">
+                  ₱{set.price.toLocaleString()}
+                  {set.duration && (
+                    <span className="text-xs font-normal text-muted-foreground block mt-1">
+                      {set.duration}
+                    </span>
+                  )}
+                </p>
+                {set.note && (
+                  <p className="text-xs text-muted-foreground mt-2 italic">{set.note}</p>
+                )}
+              </div>
               <Button className="w-full" size="lg">
                 Inquire Now
               </Button>

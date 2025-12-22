@@ -18,7 +18,7 @@ export default function Home() {
               Our <span className="text-accent">Equipment Sets</span>
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Choose from three professional audio packages designed for different needs and budgets
+              Choose from three quality audio packages designed for different needs and budgets
             </p>
           </div>
           <AudioSetsGrid />

@@ -12,7 +12,7 @@ export function Footer() {
               <span className="font-bold text-lg text-foreground">Gabe Audio</span>
             </div>
             <p className="text-sm text-muted-foreground">
-              Professional audio equipment rental for events, studios, and performances.
+              Quality audio equipment rental for events, studios, and performances.
             </p>
           </div>
 
@@ -46,7 +46,7 @@ export function Footer() {
                 <span className="text-sm text-muted-foreground">Equipment Rental</span>
               </li>
               <li>
-                <span className="text-sm text-muted-foreground">Professional Setup</span>
+                <span className="text-sm text-muted-foreground">Expert Setup</span>
               </li>
               <li>
                 <span className="text-sm text-muted-foreground">Technical Support</span>

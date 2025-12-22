@@ -4,9 +4,9 @@ import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
 
 export const metadata: Metadata = {
-  title: "Gabe Audio - Professional Audio Equipment Rental",
+  title: "Gabe Audio - Quality Audio Equipment Rental",
   description:
-    "Rent professional audio equipment for events, studios, and performances. High-quality amplifiers, speakers, mixers, and more.",
+    "Rent quality audio equipment for events, studios, and performances. High-quality amplifiers, speakers, mixers, and more.",
   generator: "v0.app",
   icons: {
     icon: [

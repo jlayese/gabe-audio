@@ -26,7 +26,7 @@ export function HeroSection() {
         </div>
 
         <h1 className="text-5xl md:text-7xl font-bold mb-6 text-foreground leading-tight">
-          Professional Audio Equipment <span className="text-accent">Rental</span>
+          Quality Audio Equipment <span className="text-accent">Rental</span>
         </h1>
 
         <p className="text-xl md:text-2xl text-muted-foreground mb-12 max-w-2xl mx-auto">
@@ -43,7 +43,7 @@ export function HeroSection() {
         </div>
 
         <p className="text-sm text-muted-foreground mt-8">
-          ✓ Professional Grade Equipment &nbsp; • &nbsp; ✓ Same Day Setup &nbsp; • &nbsp; ✓ 24/7 Support
+          ✓ High-Quality Equipment &nbsp; • &nbsp; ✓ Same Day Setup &nbsp; • &nbsp; ✓ 24/7 Support
         </p>
       </div>
     </section>

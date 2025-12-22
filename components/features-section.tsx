@@ -5,7 +5,7 @@ export function FeaturesSection() {
   const features = [
     {
       icon: Truck,
-      title: "Professional Delivery",
+      title: "Reliable Delivery",
       description: "Expert setup and installation available. Delivery and setup fees apply separately.",
     },
     {
@@ -28,7 +28,7 @@ export function FeaturesSection() {
             Why Choose <span className="text-accent">Gabe Audio</span>?
           </h2>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            We provide everything you need for professional audio experiences
+            We provide everything you need for quality audio experiences
           </p>
         </div>
 
