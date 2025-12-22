@@ -117,7 +117,24 @@ export function AudioSetsGrid() {
                   <p className="text-xs text-muted-foreground mt-2 italic">{set.note}</p>
                 )}
               </div>
-              <Button className="w-full" size="lg">
+              <Button 
+                className="w-full" 
+                size="lg"
+                onClick={() => {
+                  // Scroll to contact and add set parameter
+                  const contactSection = document.getElementById("contact")
+                  if (contactSection) {
+                    // Update URL with set parameter
+                    const url = new URL(window.location.href)
+                    url.searchParams.set("set", set.id)
+                    window.history.pushState({}, "", url.toString())
+                    // Scroll to contact section
+                    contactSection.scrollIntoView({ behavior: "smooth", block: "start" })
+                    // Trigger a custom event to notify the inquiry form
+                    window.dispatchEvent(new CustomEvent("setSelected", { detail: { setId: set.id } }))
+                  }
+                }}
+              >
                 Inquire Now
               </Button>
             </div>
