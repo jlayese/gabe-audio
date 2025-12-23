@@ -1,3 +1,5 @@
+import { getAudioSetById } from "@/lib/audio-sets-data"
+
 /**
  * Email service helper for sending emails via mail-service-app API
  */
@@ -57,12 +59,29 @@ export const generateCustomerEmail = (data: {
   returnDate: string;
   message?: string;
 }) => {
-  const rentalDate = new Date(data.rentalDate).toLocaleDateString("en-US", {
+  const startDate = new Date(data.rentalDate);
+  const endDate = new Date(data.returnDate);
+  
+  // Get set name from ID
+  const audioSet = getAudioSetById(data.setId);
+  const setName = audioSet ? audioSet.name : data.setId;
+  
+  const rentalPeriod = startDate.toLocaleString("en-US", {
     year: "numeric",
     month: "long",
     day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
   });
-  const returnDate = new Date(data.returnDate).toLocaleDateString("en-US", {
+  
+  const returnTime = endDate.toLocaleString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+  
+  const rentalDateFormatted = startDate.toLocaleDateString("en-US", {
     year: "numeric",
     month: "long",
     day: "numeric",
@@ -117,15 +136,15 @@ export const generateCustomerEmail = (data: {
                           </tr>
                           <tr>
                             <td style="color: #666666; font-size: 14px; padding: 8px 0;"><strong>Equipment Set:</strong></td>
-                            <td style="color: #333333; font-size: 14px; padding: 8px 0;">${data.setId}</td>
+                            <td style="color: #333333; font-size: 14px; padding: 8px 0;">${setName}</td>
                           </tr>
                           <tr>
                             <td style="color: #666666; font-size: 14px; padding: 8px 0;"><strong>Rental Date:</strong></td>
-                            <td style="color: #333333; font-size: 14px; padding: 8px 0;">${rentalDate}</td>
+                            <td style="color: #333333; font-size: 14px; padding: 8px 0;">${rentalDateFormatted}</td>
                           </tr>
                           <tr>
-                            <td style="color: #666666; font-size: 14px; padding: 8px 0;"><strong>Return Date:</strong></td>
-                            <td style="color: #333333; font-size: 14px; padding: 8px 0;">${returnDate}</td>
+                            <td style="color: #666666; font-size: 14px; padding: 8px 0;"><strong>Rental Period:</strong></td>
+                            <td style="color: #333333; font-size: 14px; padding: 8px 0;">${rentalPeriod} - ${returnTime} (8 hours)</td>
                           </tr>
                           ${data.message ? `
                           <tr>
@@ -177,9 +196,9 @@ Inquiry Details:
 - Name: ${data.name}
 - Email: ${data.email}
 - Phone: ${data.phone}
-- Equipment Set: ${data.setId}
-- Rental Date: ${rentalDate}
-- Return Date: ${returnDate}
+- Equipment Set: ${setName}
+- Rental Date: ${rentalDateFormatted}
+- Rental Period: ${rentalPeriod} - ${returnTime} (8 hours)
 ${data.message ? `- Message: ${data.message}` : ''}
 
 We will contact you within 24 hours to confirm availability and provide pricing details.
@@ -204,12 +223,29 @@ export const generateAdminEmail = (data: {
   returnDate: string;
   message?: string;
 }) => {
-  const rentalDate = new Date(data.rentalDate).toLocaleDateString("en-US", {
+  const startDate = new Date(data.rentalDate);
+  const endDate = new Date(data.returnDate);
+  
+  // Get set name from ID
+  const audioSet = getAudioSetById(data.setId);
+  const setName = audioSet ? audioSet.name : data.setId;
+  
+  const rentalPeriod = startDate.toLocaleString("en-US", {
     year: "numeric",
     month: "long",
     day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
   });
-  const returnDate = new Date(data.returnDate).toLocaleDateString("en-US", {
+  
+  const returnTime = endDate.toLocaleString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+  
+  const rentalDateFormatted = startDate.toLocaleDateString("en-US", {
     year: "numeric",
     month: "long",
     day: "numeric",
@@ -266,15 +302,15 @@ export const generateAdminEmail = (data: {
                         <table width="100%" cellpadding="5" cellspacing="0">
                           <tr>
                             <td style="color: #666666; font-size: 14px; padding: 8px 0; width: 150px;"><strong>Equipment Set:</strong></td>
-                            <td style="color: #333333; font-size: 14px; padding: 8px 0;">${data.setId}</td>
+                            <td style="color: #333333; font-size: 14px; padding: 8px 0;">${setName}</td>
                           </tr>
                           <tr>
                             <td style="color: #666666; font-size: 14px; padding: 8px 0;"><strong>Rental Date:</strong></td>
-                            <td style="color: #333333; font-size: 14px; padding: 8px 0;">${rentalDate}</td>
+                            <td style="color: #333333; font-size: 14px; padding: 8px 0;">${rentalDateFormatted}</td>
                           </tr>
                           <tr>
-                            <td style="color: #666666; font-size: 14px; padding: 8px 0;"><strong>Return Date:</strong></td>
-                            <td style="color: #333333; font-size: 14px; padding: 8px 0;">${returnDate}</td>
+                            <td style="color: #666666; font-size: 14px; padding: 8px 0;"><strong>Rental Period:</strong></td>
+                            <td style="color: #333333; font-size: 14px; padding: 8px 0;">${rentalPeriod} - ${returnTime} (8 hours)</td>
                           </tr>
                           ${data.message ? `
                           <tr>
@@ -317,9 +353,9 @@ Customer Information:
 - Phone: ${data.phone}
 
 Rental Details:
-- Equipment Set: ${data.setId}
-- Rental Date: ${rentalDate}
-- Return Date: ${returnDate}
+- Equipment Set: ${setName}
+- Rental Date: ${rentalDateFormatted}
+- Rental Period: ${rentalPeriod} - ${returnTime} (8 hours)
 ${data.message ? `- Additional Message: ${data.message}` : ''}
 
 Please review this inquiry and contact the customer to confirm availability and pricing.

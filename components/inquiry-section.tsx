@@ -25,9 +25,8 @@ import {
 } from "@/components/ui/select"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Mail, CalendarIcon } from "lucide-react"
-import { format } from "date-fns"
-import { DateRange } from "react-day-picker"
+import { Mail, CalendarIcon, Clock, Send } from "lucide-react"
+import { format, addHours } from "date-fns"
 
 const inquirySchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -37,12 +36,12 @@ const inquirySchema = z.object({
     .min(13, "Phone number must be complete")
     .regex(/^\+63 \d{3} \d{3} \d{4}$/, "Phone number must be in format +63 9XX XXX XXXX"),
   setId: z.enum(["set-a", "set-b", "set-c"]).optional(),
-  dateRange: z
-    .object({
-      from: z.date().optional(),
-      to: z.date().optional(),
-    })
-    .optional(),
+  rentalDate: z.date({
+    required_error: "Please select a date",
+  }),
+  rentalTime: z.string({
+    required_error: "Please select a time",
+  }),
   message: z.string().optional(),
 })
 
@@ -58,7 +57,8 @@ export function InquirySection() {
       email: "",
       phone: "+63",
       setId: undefined,
-      dateRange: undefined,
+      rentalDate: undefined,
+      rentalTime: "",
       message: "",
     },
   })
@@ -161,12 +161,18 @@ export function InquirySection() {
 
   const onSubmit = async (data: InquiryFormValues) => {
     try {
-      // Convert date range to rentalDate and returnDate for API
+      // Combine date and time, then calculate 8-hour range
+      const [hours, minutes] = data.rentalTime.split(":").map(Number)
+      const startDateTime = new Date(data.rentalDate)
+      startDateTime.setHours(hours, minutes, 0, 0)
+      
+      const endDateTime = addHours(startDateTime, 8)
+
       const payload = {
         ...data,
-        rentalDate: data.dateRange?.from ? format(data.dateRange.from, "yyyy-MM-dd") : "",
-        returnDate: data.dateRange?.to ? format(data.dateRange.to, "yyyy-MM-dd") : "",
-        dateRange: undefined, // Remove dateRange from payload
+        rentalDate: startDateTime.toISOString(),
+        returnDate: endDateTime.toISOString(),
+        rentalTime: undefined, // Remove time from payload (it's included in dates)
       }
 
       const response = await fetch("/api/rental-requests", {
@@ -182,7 +188,8 @@ export function InquirySection() {
           email: "",
           phone: "+63",
           setId: undefined,
-          dateRange: undefined,
+          rentalDate: undefined,
+          rentalTime: "",
           message: "",
         })
         setTimeout(() => setSubmitted(false), 5000)
@@ -206,7 +213,25 @@ export function InquirySection() {
             </CardDescription>
           </CardHeader>
 
-          <CardContent>
+          <CardContent className="relative">
+            {/* Loading Overlay */}
+            {form.formState.isSubmitting && (
+              <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center rounded-lg">
+                <div className="bg-card border border-border rounded-lg p-8 shadow-lg max-w-sm w-full mx-4">
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="relative">
+                      <div className="w-16 h-16 border-4 border-accent/20 border-t-accent rounded-full animate-spin"></div>
+                      <Send className="w-6 h-6 text-accent absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 animate-pulse" />
+                    </div>
+                    <div className="text-center">
+                      <h3 className="text-lg font-semibold text-foreground mb-1">Sending Your Inquiry</h3>
+                      <p className="text-sm text-muted-foreground">Please wait while we process your request...</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {submitted ? (
               <div className="text-center py-8">
                 <p className="text-lg font-semibold text-accent mb-2">✓ Inquiry Submitted!</p>
@@ -302,10 +327,10 @@ export function InquirySection() {
                     />
                     <FormField
                       control={form.control}
-                      name="dateRange"
+                      name="rentalDate"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Rental Period</FormLabel>
+                          <FormLabel>Date *</FormLabel>
                           <Popover>
                             <PopoverTrigger asChild>
                               <FormControl>
@@ -314,17 +339,10 @@ export function InquirySection() {
                                   className="w-full justify-start text-left font-normal bg-secondary hover:bg-secondary/80"
                                 >
                                   <CalendarIcon className="mr-2 h-4 w-4" />
-                                  {field.value?.from ? (
-                                    field.value.to ? (
-                                      <>
-                                        {format(field.value.from, "LLL dd, y")} -{" "}
-                                        {format(field.value.to, "LLL dd, y")}
-                                      </>
-                                    ) : (
-                                      format(field.value.from, "LLL dd, y")
-                                    )
+                                  {field.value ? (
+                                    format(field.value, "LLL dd, y")
                                   ) : (
-                                    <span className="text-muted-foreground">Pick a date range</span>
+                                    <span className="text-muted-foreground">Pick a date</span>
                                   )}
                                 </Button>
                               </FormControl>
@@ -332,11 +350,10 @@ export function InquirySection() {
                             <PopoverContent className="w-auto p-0" align="start">
                               <Calendar
                                 initialFocus
-                                mode="range"
-                                defaultMonth={field.value?.from}
-                                selected={field.value as DateRange}
+                                mode="single"
+                                selected={field.value}
                                 onSelect={field.onChange}
-                                numberOfMonths={2}
+                                disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
                               />
                             </PopoverContent>
                           </Popover>
@@ -345,6 +362,78 @@ export function InquirySection() {
                       )}
                     />
                   </div>
+
+                  <FormField
+                    control={form.control}
+                    name="rentalTime"
+                    render={({ field }) => {
+                      const rentalDate = form.watch("rentalDate")
+                      const rentalTime = field.value
+                      
+                      // Generate time options (30-minute intervals from 6 AM to 10 PM)
+                      const timeOptions = []
+                      for (let hour = 6; hour <= 22; hour++) {
+                        for (let minute = 0; minute < 60; minute += 30) {
+                          const time24 = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`
+                          const date = new Date()
+                          date.setHours(hour, minute, 0, 0)
+                          const time12 = format(date, "h:mm a")
+                          timeOptions.push({ value: time24, label: time12 })
+                        }
+                      }
+                      
+                      // Calculate 8-hour range display
+                      let rangeDisplay = null
+                      if (rentalDate && rentalTime) {
+                        try {
+                          const [hours, minutes] = rentalTime.split(":").map(Number)
+                          const startDateTime = new Date(rentalDate)
+                          startDateTime.setHours(hours, minutes, 0, 0)
+                          const endDateTime = addHours(startDateTime, 8)
+                          
+                          rangeDisplay = (
+                            <div className="mt-2 p-3 bg-secondary border border-border rounded-lg">
+                              <div className="flex items-center gap-2 text-sm">
+                                <Clock className="w-4 h-4 text-accent" />
+                                <span className="text-muted-foreground">Rental Period (8 hours):</span>
+                              </div>
+                              <div className="mt-1 text-sm font-medium text-foreground">
+                                {format(startDateTime, "MMM dd, y 'at' h:mm a")} - {format(endDateTime, "h:mm a")}
+                              </div>
+                            </div>
+                          )
+                        } catch (error) {
+                          // Invalid time format
+                        }
+                      }
+
+                      const selectedTimeLabel = timeOptions.find(opt => opt.value === rentalTime)?.label || ""
+
+                      return (
+                        <FormItem>
+                          <FormLabel>Start Time *</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl>
+                              <SelectTrigger className="bg-secondary">
+                                <SelectValue placeholder="Select start time">
+                                  {selectedTimeLabel || "Select start time"}
+                                </SelectValue>
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent className="max-h-[300px]">
+                              {timeOptions.map((option) => (
+                                <SelectItem key={option.value} value={option.value}>
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {rangeDisplay}
+                          <FormMessage />
+                        </FormItem>
+                      )
+                    }}
+                  />
 
                   <FormField
                     control={form.control}
