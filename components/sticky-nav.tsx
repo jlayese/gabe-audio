@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Music } from "lucide-react"
 import { cn } from "@/lib/utils"
+import Link from "next/link"
 
 export function StickyNav() {
   const [isVisible, setIsVisible] = useState(false)
@@ -69,6 +70,14 @@ export function StickyNav() {
               >
                 Features
               </Button>
+              <Link href="/games">
+                <Button
+                  variant="ghost"
+                  className="hidden sm:inline-flex hover:bg-accent/20 hover:text-accent text-foreground"
+                >
+                  Games
+                </Button>
+              </Link>
               <Button
                 onClick={() => scrollToSection("contact")}
                 size="sm"
