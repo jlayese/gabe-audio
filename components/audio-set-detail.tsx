@@ -9,6 +9,8 @@ interface Equipment {
   id: string
   name: string
   description: string
+  brand?: string
+  model?: string
   quantity: number
 }
 
@@ -115,6 +117,9 @@ export function AudioSetDetail({ audioSet }: AudioSetDetailProps) {
                     </div>
                     <div className="flex-1">
                       <CardTitle className="text-foreground">{item.name}</CardTitle>
+                      {item.brand && item.model && (
+                        <p className="text-sm font-semibold text-accent mt-1">{item.brand} {item.model}</p>
+                      )}
                       {item.quantity > 1 && (
                         <span className="text-xs text-muted-foreground">Quantity: {item.quantity}</span>
                       )}

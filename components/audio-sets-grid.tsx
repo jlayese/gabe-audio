@@ -9,6 +9,8 @@ interface Equipment {
   id: string
   name: string
   description: string
+  brand?: string
+  model?: string
   quantity: number
 }
 
@@ -62,7 +64,7 @@ export function AudioSetsGrid() {
       {sets.map((set) => (
         <Card
           key={set.id}
-          className="overflow-hidden bg-card hover:border-accent transition-colors group cursor-pointer"
+          className="overflow-hidden bg-card hover:border-accent transition-colors group cursor-pointer flex flex-col"
         >
           <div className="relative h-48 overflow-hidden">
             <img
@@ -85,7 +87,7 @@ export function AudioSetsGrid() {
             </div>
           </CardHeader>
 
-          <CardContent className="space-y-6">
+          <CardContent className="space-y-6 flex-1 flex flex-col">
             {/* Equipment List */}
             <div className="space-y-3">
               <h3 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground">Includes:</h3>
@@ -95,6 +97,9 @@ export function AudioSetsGrid() {
                     <Zap className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" />
                     <div>
                       <p className="font-medium text-foreground">{item.name}</p>
+                      {item.brand && item.model && (
+                        <p className="text-xs font-semibold text-accent">{item.brand} {item.model}</p>
+                      )}
                       <p className="text-xs text-muted-foreground">{item.description}</p>
                     </div>
                   </li>
@@ -102,10 +107,10 @@ export function AudioSetsGrid() {
               </ul>
             </div>
 
-            {/* Pricing */}
-            <div className="border-t border-border pt-4">
-              <div className="mb-4">
-                <p className="text-3xl font-bold text-accent">
+            {/* Pricing - aligned to bottom right */}
+            <div className="border-t border-border pt-4 mt-auto">
+              <div className="mb-4 flex flex-col items-end">
+                <p className="text-3xl font-bold text-accent text-right">
                   ₱{set.price.toLocaleString()}
                   {set.duration && (
                     <span className="text-xs font-normal text-muted-foreground block mt-1">
@@ -114,13 +119,12 @@ export function AudioSetsGrid() {
                   )}
                 </p>
                 {set.note && (
-                  <p className="text-xs text-muted-foreground mt-2 italic">{set.note}</p>
+                  <p className="text-xs text-muted-foreground mt-2 italic text-right">{set.note}</p>
                 )}
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 justify-end">
                 <Button
                   variant="outline"
-                  className="flex-1"
                   size="lg"
                   onClick={() => {
                     window.location.href = `/sets/${set.id}`
@@ -129,7 +133,6 @@ export function AudioSetsGrid() {
                   View Details
                 </Button>
                 <Button
-                  className="flex-1"
                   size="lg"
                   onClick={() => {
                     // Scroll to contact and add set parameter
