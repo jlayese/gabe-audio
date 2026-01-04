@@ -68,7 +68,10 @@ export function Footer() {
               </div>
               <div className="flex items-start gap-2">
                 <MapPin className="w-4 h-4 text-accent mt-0.5" />
-                <span className="text-sm text-muted-foreground">Available citywide</span>
+                <div className="text-sm text-muted-foreground">
+                  <p>Serving Cebu, Mandaue,</p>
+                  <p>Pitos, Binaliw, Talamaban</p>
+                </div>
               </div>
             </div>
           </div>
