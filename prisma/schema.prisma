@@ -1,0 +1,51 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model AudioSet {
+  id        String     @id @default(cuid())
+  name      String     @unique
+  description String
+  price     Float
+  image     String?
+  equipment AudioEquipment[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model AudioEquipment {
+  id        String     @id @default(cuid())
+  name      String
+  description String
+  quantity  Int        @default(1)
+  audioSetId String
+  audioSet  AudioSet   @relation(fields: [audioSetId], references: [id])
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@index([audioSetId])
+}
+
+model RentalRequest {
+  id        String     @id @default(cuid())
+  name      String
+  email     String
+  phone     String
+  audioSetId String
+  rentalDate DateTime
+  returnDate DateTime
+  message   String?
+  status    String     @default("pending")
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@index([audioSetId])
+}
