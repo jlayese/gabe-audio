@@ -58,6 +58,8 @@ export const generateCustomerEmail = (data: {
   rentalDate: string;
   returnDate: string;
   message?: string;
+  latitude?: number;
+  longitude?: number;
 }) => {
   const startDate = new Date(data.rentalDate);
   const endDate = new Date(data.returnDate);
@@ -86,6 +88,11 @@ export const generateCustomerEmail = (data: {
     month: "long",
     day: "numeric",
   });
+
+  // Generate Google Maps link if coordinates are provided
+  const mapsLink = data.latitude && data.longitude
+    ? `https://www.google.com/maps?q=${data.latitude},${data.longitude}`
+    : null;
 
   return {
     html: `
@@ -152,6 +159,15 @@ export const generateCustomerEmail = (data: {
                             <td style="color: #333333; font-size: 14px; padding: 8px 0;">${data.message}</td>
                           </tr>
                           ` : ''}
+                          ${mapsLink ? `
+                          <tr>
+                            <td style="color: #666666; font-size: 14px; padding: 8px 0; vertical-align: top;"><strong>Setup Location:</strong></td>
+                            <td style="color: #333333; font-size: 14px; padding: 8px 0;">
+                              <a href="${mapsLink}" target="_blank" style="color: #667eea; text-decoration: none;">View on Google Maps</a><br>
+                              <span style="color: #999999; font-size: 12px;">${data.latitude?.toFixed(6)}, ${data.longitude?.toFixed(6)}</span>
+                            </td>
+                          </tr>
+                          ` : ''}
                         </table>
                       </div>
                       
@@ -200,6 +216,7 @@ Inquiry Details:
 - Rental Date: ${rentalDateFormatted}
 - Rental Period: ${rentalPeriod} - ${returnTime} (8 hours)
 ${data.message ? `- Message: ${data.message}` : ''}
+${mapsLink ? `- Setup Location: ${mapsLink}\n  Coordinates: ${data.latitude?.toFixed(6)}, ${data.longitude?.toFixed(6)}` : ''}
 
 We will contact you within 24 hours to confirm availability and provide pricing details.
 
@@ -222,6 +239,8 @@ export const generateAdminEmail = (data: {
   rentalDate: string;
   returnDate: string;
   message?: string;
+  latitude?: number;
+  longitude?: number;
 }) => {
   const startDate = new Date(data.rentalDate);
   const endDate = new Date(data.returnDate);
@@ -250,6 +269,11 @@ export const generateAdminEmail = (data: {
     month: "long",
     day: "numeric",
   });
+
+  // Generate Google Maps link if coordinates are provided
+  const mapsLink = data.latitude && data.longitude
+    ? `https://www.google.com/maps?q=${data.latitude},${data.longitude}`
+    : null;
 
   return {
     html: `
@@ -318,6 +342,15 @@ export const generateAdminEmail = (data: {
                             <td style="color: #333333; font-size: 14px; padding: 8px 0;">${data.message}</td>
                           </tr>
                           ` : ''}
+                          ${mapsLink ? `
+                          <tr>
+                            <td style="color: #666666; font-size: 14px; padding: 8px 0; vertical-align: top;"><strong>Delivery Location:</strong></td>
+                            <td style="color: #333333; font-size: 14px; padding: 8px 0;">
+                              <a href="${mapsLink}" target="_blank" style="color: #667eea; text-decoration: none; font-weight: bold;">📍 View on Google Maps</a><br>
+                              <span style="color: #999999; font-size: 12px;">${data.latitude?.toFixed(6)}, ${data.longitude?.toFixed(6)}</span>
+                            </td>
+                          </tr>
+                          ` : ''}
                         </table>
                       </div>
                       
@@ -357,6 +390,7 @@ Rental Details:
 - Rental Date: ${rentalDateFormatted}
 - Rental Period: ${rentalPeriod} - ${returnTime} (8 hours)
 ${data.message ? `- Additional Message: ${data.message}` : ''}
+${mapsLink ? `- Setup Location: ${mapsLink}\n  Coordinates: ${data.latitude?.toFixed(6)}, ${data.longitude?.toFixed(6)}` : ''}
 
 Please review this inquiry and contact the customer to confirm availability and pricing.
     `.trim(),

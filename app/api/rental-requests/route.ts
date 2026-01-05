@@ -34,6 +34,8 @@ export async function POST(request: Request) {
         rentalDate: body.rentalDate,
         returnDate: body.returnDate,
         message: body.message,
+        latitude: body.latitude,
+        longitude: body.longitude,
       });
 
       await sendNotificationEmail({
@@ -57,6 +59,8 @@ export async function POST(request: Request) {
         rentalDate: body.rentalDate,
         returnDate: body.returnDate,
         message: body.message,
+        latitude: body.latitude,
+        longitude: body.longitude,
       });
 
       const adminEmailAddress = process.env.ADMIN_EMAIL || "gabeaudio@example.com";

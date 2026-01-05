@@ -1,4 +1,4 @@
-import { Music, Phone, Mail, MapPin } from "lucide-react"
+import { Music, Phone, Mail } from "lucide-react"
 
 export function Footer() {
   return (
@@ -60,18 +60,15 @@ export function Footer() {
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <Phone className="w-4 h-4 text-accent" />
-                <span className="text-sm text-muted-foreground">(555) 123-4567</span>
+                <a href="tel:+639199803670" className="text-sm text-muted-foreground hover:text-accent transition">
+                  09199803670
+                </a>
               </div>
               <div className="flex items-center gap-2">
                 <Mail className="w-4 h-4 text-accent" />
-                <span className="text-sm text-muted-foreground">info@gabeaudio.com</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <MapPin className="w-4 h-4 text-accent mt-0.5" />
-                <div className="text-sm text-muted-foreground">
-                  <p>Serving Cebu, Mandaue,</p>
-                  <p>Pitos, Binaliw, Talamaban</p>
-                </div>
+                <a href="mailto:gabeaudio7@gmail.com" className="text-sm text-muted-foreground hover:text-accent transition">
+                  gabeaudio7@gmail.com
+                </a>
               </div>
             </div>
           </div>

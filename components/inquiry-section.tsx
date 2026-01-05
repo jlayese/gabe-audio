@@ -25,8 +25,16 @@ import {
 } from "@/components/ui/select"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Mail, CalendarIcon, Clock, Send } from "lucide-react"
+import { Mail, CalendarIcon, Clock, Send, MapPin } from "lucide-react"
 import { format, addHours } from "date-fns"
+import dynamic from "next/dynamic"
+
+const DynamicMapPicker = dynamic(() => import("@/components/map-picker").then(mod => mod.MapPicker), {
+  ssr: false,
+  loading: () => (
+    <div className="h-[300px] w-full rounded-md overflow-hidden border border-border bg-muted animate-pulse" />
+  ),
+})
 
 const inquirySchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -43,12 +51,15 @@ const inquirySchema = z.object({
     required_error: "Please select a time",
   }),
   message: z.string().optional(),
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
 })
 
 type InquiryFormValues = z.infer<typeof inquirySchema>
 
 export function InquirySection() {
   const [submitted, setSubmitted] = useState(false)
+  const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null)
 
   const form = useForm<InquiryFormValues>({
     resolver: zodResolver(inquirySchema),
@@ -60,10 +71,18 @@ export function InquirySection() {
       rentalDate: undefined,
       rentalTime: "",
       message: "",
+      latitude: undefined,
+      longitude: undefined,
     },
   })
 
   const { setValue } = form
+
+  const handleLocationSelect = (lat: number, lng: number) => {
+    setLocation({ lat, lng })
+    setValue("latitude", lat)
+    setValue("longitude", lng)
+  }
 
   // Phone number formatting handler
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>, fieldOnChange: (value: string) => void) => {
@@ -191,7 +210,10 @@ export function InquirySection() {
           rentalDate: undefined,
           rentalTime: "",
           message: "",
+          latitude: undefined,
+          longitude: undefined,
         })
+        setLocation(null)
         setTimeout(() => setSubmitted(false), 5000)
       }
     } catch (error) {
@@ -453,6 +475,25 @@ export function InquirySection() {
                       </FormItem>
                     )}
                   />
+
+                  <div className="space-y-2">
+                    <FormLabel className="flex items-center gap-2">
+                      <MapPin className="h-4 w-4" />
+                      Setup Location (Optional)
+                    </FormLabel>
+                    <p className="text-sm text-muted-foreground">
+                      Click on the map or drag the marker to set your setup location
+                    </p>
+                    <DynamicMapPicker
+                      onLocationSelect={handleLocationSelect}
+                      initialPosition={location || undefined}
+                    />
+                    {location && (
+                      <p className="text-xs text-muted-foreground">
+                        Location: {location.lat.toFixed(6)}, {location.lng.toFixed(6)}
+                      </p>
+                    )}
+                  </div>
 
                   <Button
                     type="submit"
