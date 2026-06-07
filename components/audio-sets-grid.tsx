@@ -107,21 +107,17 @@ export function AudioSetsGrid() {
               </ul>
             </div>
 
-            {/* Pricing - aligned to bottom right */}
             <div className="border-t border-border pt-4 mt-auto">
-              <div className="mb-4 flex flex-col items-end">
-                <p className="text-3xl font-bold text-accent text-right">
-                  ₱{set.price.toLocaleString()}
+              {(set.duration || set.note) && (
+                <div className="mb-4 flex flex-col items-end">
                   {set.duration && (
-                    <span className="text-xs font-normal text-muted-foreground block mt-1">
-                      {set.duration}
-                    </span>
+                    <p className="text-sm text-muted-foreground text-right">{set.duration}</p>
                   )}
-                </p>
-                {set.note && (
-                  <p className="text-xs text-muted-foreground mt-2 italic text-right">{set.note}</p>
-                )}
-              </div>
+                  {set.note && (
+                    <p className="text-xs text-muted-foreground mt-2 italic text-right">{set.note}</p>
+                  )}
+                </div>
+              )}
               <div className="flex gap-2 justify-end">
                 <Button
                   variant="outline"
