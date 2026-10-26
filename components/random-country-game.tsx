@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { countries, checkCountryAnswer, type Country } from "@/lib/countries-data"
-import { Mic, Volume2, Type, ZoomIn } from "lucide-react"
+import { Mic, Volume2, Type, ZoomIn, Square } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 
@@ -54,6 +54,7 @@ export const RandomCountryGame = ({ onGameEnd }: RandomCountryGameProps) => {
   const [score, setScore] = useState(0)
   const [questionNumber, setQuestionNumber] = useState(0)
   const [gameStarted, setGameStarted] = useState(false)
+  const [gameStopped, setGameStopped] = useState(false)
   const [availableCountries, setAvailableCountries] = useState<Country[]>([])
   const [jumbledLetters, setJumbledLetters] = useState<string[]>([])
   const [isSpeechSupported, setIsSpeechSupported] = useState(false)
@@ -305,6 +306,7 @@ export const RandomCountryGame = ({ onGameEnd }: RandomCountryGameProps) => {
   useEffect(() => {
     const shouldListen =
       gameStarted &&
+      !gameStopped &&
       currentCountry &&
       !showAnswer &&
       !isListening &&
@@ -323,7 +325,7 @@ export const RandomCountryGame = ({ onGameEnd }: RandomCountryGameProps) => {
       }
     }, 600)
     return () => clearTimeout(timer)
-  }, [gameStarted, currentCountry, showAnswer, isListening, isSpeaking, micBlocked, micReady, isSpeechSupported])
+  }, [gameStarted, gameStopped, currentCountry, showAnswer, isListening, isSpeaking, micBlocked, micReady, isSpeechSupported])
 
   // Ask for the mic once up front (from a click), so the browser shows its permission prompt
   // before speech recognition starts and stops in the background
@@ -381,6 +383,7 @@ export const RandomCountryGame = ({ onGameEnd }: RandomCountryGameProps) => {
 
   const startGame = () => {
     setGameStarted(true)
+    setGameStopped(false)
     setScore(0)
     setQuestionNumber(1)
     loadQuestion(countriesForDifficulty(1), 1)
@@ -393,11 +396,25 @@ export const RandomCountryGame = ({ onGameEnd }: RandomCountryGameProps) => {
     clearPending()
     stopListening()
     setGameStarted(false)
+    setGameStopped(false)
     setCurrentCountry(null)
     setScore(0)
     setQuestionNumber(0)
     setCurrentDifficulty(1)
   }
+
+  // End the current game early and show the final score
+  const stopGame = () => {
+    clearPending()
+    stopListening()
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel()
+    }
+    setIsSpeaking(false)
+    setGameStopped(true)
+  }
+
+  const backToGames = onGameEnd ?? (() => router.push("/games"))
 
   const speakCountry = () => {
     if (!currentCountry || !("speechSynthesis" in window)) return
@@ -432,13 +449,13 @@ export const RandomCountryGame = ({ onGameEnd }: RandomCountryGameProps) => {
     )
   }
 
-  if (!currentCountry) {
+  if (!currentCountry || gameStopped) {
     return (
       <Card className="w-full max-w-2xl mx-auto">
         <CardHeader className="text-center">
-          <CardTitle className="text-3xl">Congratulations!</CardTitle>
+          <CardTitle className="text-3xl">{gameStopped ? "Game Stopped" : "Congratulations!"}</CardTitle>
           <CardDescription className="text-lg">
-            You've completed all countries! Final Score: {score}
+            {gameStopped ? "Thanks for playing!" : "You've completed all countries!"} Final Score: {score}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col items-center gap-4">
@@ -446,7 +463,7 @@ export const RandomCountryGame = ({ onGameEnd }: RandomCountryGameProps) => {
             <Button onClick={resetGame} size="lg" className="flex-1">
               Play Again
             </Button>
-            <Button onClick={onGameEnd ?? (() => router.push("/games"))} size="lg" variant="outline" className="flex-1">
+            <Button onClick={backToGames} size="lg" variant="outline" className="flex-1">
               Back to Games
             </Button>
           </div>
@@ -637,6 +654,16 @@ export const RandomCountryGame = ({ onGameEnd }: RandomCountryGameProps) => {
                 Normal Letters
               </>
             )}
+          </Button>
+        </div>
+
+        <div className="flex gap-2 border-t border-border pt-4">
+          <Button onClick={stopGame} variant="outline" className="flex-1">
+            <Square className="mr-2 h-4 w-4" />
+            Stop Game
+          </Button>
+          <Button onClick={backToGames} variant="outline" className="flex-1">
+            Back to Games
           </Button>
         </div>
       </CardContent>
