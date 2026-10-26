@@ -4,8 +4,9 @@ import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import { countries, checkCountryAnswer, type Country } from "@/lib/countries-data"
-import { Mic, MicOff, CheckCircle2, XCircle, ArrowRight, Volume2, Type, ZoomIn } from "lucide-react"
+import { Mic, Volume2, Type, ZoomIn } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 
@@ -13,12 +14,38 @@ interface RandomCountryGameProps {
   onGameEnd?: () => void
 }
 
+const MAX_DIFFICULTY = 5
+
+// Speech errors that mean the mic can't be used, so we stop auto-restarting it
+const BLOCKING_SPEECH_ERRORS = ["not-allowed", "service-not-allowed", "audio-capture", "network"]
+
+const toLetters = (text: string): string[] => text.replace(/[^A-Za-z]/g, "").toUpperCase().split("")
+
+// Fisher-Yates shuffle, retried so the letters don't come out already solved
+const jumbleLetters = (text: string): string[] => {
+  const original = toLetters(text)
+  let letters = [...original]
+  for (let attempt = 0; attempt < 10; attempt++) {
+    letters = [...original]
+    for (let i = letters.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[letters[i], letters[j]] = [letters[j], letters[i]]
+    }
+    if (letters.join("") !== original.join("")) break
+  }
+  return letters
+}
+
+const countriesForDifficulty = (difficulty: number) => countries.filter(c => c.difficulty === difficulty)
+
 export const RandomCountryGame = ({ onGameEnd }: RandomCountryGameProps) => {
   const router = useRouter()
   const [currentCountry, setCurrentCountry] = useState<Country | null>(null)
   const [currentDifficulty, setCurrentDifficulty] = useState<number>(1)
   const [isListening, setIsListening] = useState(false)
+  const [isSpeaking, setIsSpeaking] = useState(false)
   const [transcript, setTranscript] = useState("")
+  const [typedAnswer, setTypedAnswer] = useState("")
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null)
   const [showAnswer, setShowAnswer] = useState(false)
   const [score, setScore] = useState(0)
@@ -27,137 +54,166 @@ export const RandomCountryGame = ({ onGameEnd }: RandomCountryGameProps) => {
   const [availableCountries, setAvailableCountries] = useState<Country[]>([])
   const [jumbledLetters, setJumbledLetters] = useState<string[]>([])
   const [isSpeechSupported, setIsSpeechSupported] = useState(false)
+  const [micBlocked, setMicBlocked] = useState(false)
   const [speechError, setSpeechError] = useState<string | null>(null)
   const [showManualAnswer, setShowManualAnswer] = useState(false)
   const [animatedLetters, setAnimatedLetters] = useState<string[]>([])
   const [isAnimating, setIsAnimating] = useState(false)
   const [letterSize, setLetterSize] = useState<"normal" | "large">("normal")
   const recognitionRef = useRef<SpeechRecognition | null>(null)
-  const nextCountriesRef = useRef<Country[] | null>(null)
+  const timersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set())
+  const animationRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // Speech recognition callbacks are registered once, so they call the latest handler through this ref
+  const onSpeechResultRef = useRef<(answer: string) => void>(() => {})
 
-  // Function to jumble/scramble letters
-  const jumbleLetters = (text: string): string[] => {
-    // Remove spaces and convert to uppercase
-    const letters = text.replace(/\s+/g, "").toUpperCase().split("")
-    // Fisher-Yates shuffle algorithm
-    for (let i = letters.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1))
-      ;[letters[i], letters[j]] = [letters[j], letters[i]]
-    }
-    return letters
+  const schedule = (fn: () => void, ms: number) => {
+    const timer = setTimeout(() => {
+      timersRef.current.delete(timer)
+      fn()
+    }, ms)
+    timersRef.current.add(timer)
   }
 
-  // Function to animate letters from jumbled to correct order
-  const animateToCorrect = (countryName: string, onComplete?: () => void) => {
+  const stopAnimation = () => {
+    if (animationRef.current) {
+      clearInterval(animationRef.current)
+      animationRef.current = null
+    }
+  }
+
+  const clearPending = () => {
+    timersRef.current.forEach(clearTimeout)
+    timersRef.current.clear()
+    stopAnimation()
+  }
+
+  const stopListening = () => {
+    try {
+      recognitionRef.current?.abort()
+    } catch {
+      // Ignore errors when stopping
+    }
+  }
+
+  // Animate letters from jumbled to correct order, one position per tick
+  const animateToCorrect = (from: string[], countryName: string, onComplete: () => void) => {
+    stopAnimation()
+    const target = toLetters(countryName)
+    const working = [...from]
+    setAnimatedLetters([...working])
     setIsAnimating(true)
-    const correctLetters = countryName.replace(/\s+/g, "").toUpperCase().split("")
-    const currentJumbled = [...jumbledLetters]
-    
-    // Initialize animatedLetters with current jumbled letters so rendering picks it up immediately
-    setAnimatedLetters([...currentJumbled])
-    
-    // Create a mapping of correct positions
-    const letterPositions: { [key: string]: number[] } = {}
-    correctLetters.forEach((letter, index) => {
-      if (!letterPositions[letter]) {
-        letterPositions[letter] = []
-      }
-      letterPositions[letter].push(index)
-    })
-    
-    // Animate step by step
+
     let step = 0
-    const totalSteps = correctLetters.length
-    const animationInterval = setInterval(() => {
-      if (step < totalSteps) {
-        // Find the correct letter for this position
-        const targetLetter = correctLetters[step]
-        // Find where this letter is in the jumbled array
-        const jumbledIndex = currentJumbled.findIndex((l, idx) => {
-          // Check if this letter hasn't been placed yet and matches
-          const remainingPositions = letterPositions[targetLetter]?.filter(pos => pos >= step) || []
-          return l === targetLetter && remainingPositions.length > 0
-        })
-        
-        if (jumbledIndex !== -1 && jumbledIndex !== step) {
-          // Swap letters
-          ;[currentJumbled[step], currentJumbled[jumbledIndex]] = [currentJumbled[jumbledIndex], currentJumbled[step]]
+    animationRef.current = setInterval(() => {
+      if (step < target.length) {
+        // Only look at positions not yet placed, so repeated letters don't get swapped back out
+        const sourceIndex = working.findIndex((letter, idx) => idx >= step && letter === target[step])
+        if (sourceIndex > step) {
+          ;[working[step], working[sourceIndex]] = [working[sourceIndex], working[step]]
         }
-        
-        setAnimatedLetters([...currentJumbled])
+        setAnimatedLetters([...working])
         step++
       } else {
-        clearInterval(animationInterval)
+        stopAnimation()
         setIsAnimating(false)
-        setAnimatedLetters(correctLetters)
-        
-        // Call onComplete callback if provided (for correct answers to proceed to next country)
-        if (onComplete) {
-          setTimeout(() => {
-            onComplete()
-          }, 1000) // Wait 1 second after animation to show the green letters
-        }
-        
-        // After animation completes, if answer was incorrect, reset state and restart listening
-        if (showAnswer && !isCorrect && !onComplete) {
-          setTimeout(() => {
-            // Reset all answer-related state to original state
-            setShowAnswer(false)
-            setTranscript("")
-            setIsCorrect(null)
-            setAnimatedLetters([])
-            // Regenerate jumbled letters for the same country
-            setCurrentCountry(prevCountry => {
-              if (prevCountry) {
-                setJumbledLetters(jumbleLetters(prevCountry.name))
-              }
-              return prevCountry
-            })
-            
-            // Restart listening after state is reset
-            setTimeout(() => {
-              if (isSpeechSupported && recognitionRef.current) {
-                setCurrentCountry(prevCountry => {
-                  if (prevCountry) {
-                    try {
-                      recognitionRef.current?.start()
-                    } catch (error: any) {
-                      // Silently handle errors
-                      if (error?.name !== "InvalidStateError" && !error?.message?.includes("already started")) {
-                        // Only log unexpected errors
-                      }
-                    }
-                  }
-                  return prevCountry
-                })
-              }
-            }, 300)
-          }, 1500) // Wait 1.5 seconds after animation to show the incorrect answer
-        }
+        setAnimatedLetters(target)
+        onComplete()
       }
     }, 80) // 80ms per letter animation
   }
+
+  // Show a question from the pool, moving up a difficulty when the pool is empty
+  const loadQuestion = (pool: Country[], difficulty: number) => {
+    clearPending()
+    stopListening()
+
+    let nextDifficulty = difficulty
+    let nextPool = pool
+    while (nextPool.length === 0 && nextDifficulty < MAX_DIFFICULTY) {
+      nextDifficulty++
+      nextPool = countriesForDifficulty(nextDifficulty)
+    }
+
+    setTranscript("")
+    setTypedAnswer("")
+    setShowAnswer(false)
+    setIsCorrect(null)
+    setShowManualAnswer(false)
+    setAnimatedLetters([])
+    setIsAnimating(false)
+    setSpeechError(null)
+
+    if (nextPool.length === 0) {
+      // Game complete
+      setCurrentCountry(null)
+      setAvailableCountries([])
+      onGameEnd?.()
+      return
+    }
+
+    const selected = nextPool[Math.floor(Math.random() * nextPool.length)]
+    setCurrentDifficulty(nextDifficulty)
+    setAvailableCountries(nextPool)
+    setCurrentCountry(selected)
+    setJumbledLetters(jumbleLetters(selected.name))
+  }
+
+  const advance = (answered: Country, pool: Country[], difficulty: number) => {
+    setQuestionNumber(prev => prev + 1)
+    loadQuestion(pool.filter(c => c.name !== answered.name), difficulty)
+  }
+
+  const submitAnswer = (rawAnswer: string) => {
+    const answer = rawAnswer.trim().replace(/^["']|["']$/g, "").replace(/\.$/, "").trim()
+    if (!currentCountry || showAnswer || !answer) return
+
+    const country = currentCountry
+    const pool = availableCountries
+    const difficulty = currentDifficulty
+    const correct = checkCountryAnswer(answer, country)
+
+    stopListening()
+    setTranscript(answer)
+    setTypedAnswer("")
+    setIsCorrect(correct)
+    setShowAnswer(true)
+
+    if (correct) {
+      setScore(prev => prev + 1)
+      animateToCorrect(jumbledLetters, country.name, () => {
+        // Wait 1 second after animation to show the green letters
+        schedule(() => advance(country, pool, difficulty), 1000)
+      })
+    } else {
+      // Keep the same letters so the answer isn't given away, then let them try again
+      schedule(() => {
+        setShowAnswer(false)
+        setIsCorrect(null)
+        setTranscript("")
+      }, 1500)
+    }
+  }
+
+  useEffect(() => {
+    onSpeechResultRef.current = submitAnswer
+  })
 
   // Initialize speech recognition
   useEffect(() => {
     if (typeof window === "undefined") return
 
-    // Check for speech recognition support
-    const SpeechRecognition = 
-      (window as any).webkitSpeechRecognition || 
+    const SpeechRecognition =
+      (window as any).webkitSpeechRecognition ||
       (window as any).SpeechRecognition ||
       null
 
     if (!SpeechRecognition) {
       setIsSpeechSupported(false)
-      setSpeechError("Speech recognition is not supported in your browser. Please use Chrome, Edge, or Safari.")
       return
     }
 
-    setIsSpeechSupported(true)
-    
     try {
-      const recognition = new SpeechRecognition()
+      const recognition: SpeechRecognition = new SpeechRecognition()
       recognition.continuous = false
       recognition.interimResults = false
       recognition.lang = "en-US"
@@ -169,94 +225,35 @@ export const RandomCountryGame = ({ onGameEnd }: RandomCountryGameProps) => {
       }
 
       recognition.onresult = (event: SpeechRecognitionEvent) => {
-        if (event.results && event.results.length > 0 && event.results[0].length > 0) {
-          const detectedTranscript = event.results[0][0].transcript.trim()
-          setTranscript(detectedTranscript)
-          setIsListening(false)
-          // Small delay to show the detected text before checking answer
-          setTimeout(() => {
-            // Get the current country from state to avoid closure issues
-            setCurrentCountry((country) => {
-              if (country) {
-                // Process answer directly here with fresh country value
-                const cleanedAnswer = detectedTranscript
-                  .trim()
-                  .replace(/^["']|["']$/g, "")
-                  .replace(/\.$/, "")
-                  .trim()
-                
-                const correct = checkCountryAnswer(cleanedAnswer, country)
-                setIsCorrect(correct)
-                setShowAnswer(true)
-                
-                // Always animate to show correct answer, regardless of whether user was correct or not
-                if (correct) {
-                  // For correct answers, proceed to next country after animation completes
-                  setScore(prev => prev + 1)
-                  // Remove the country from available list
-                  setAvailableCountries(prev => {
-                    const updated = prev.filter(c => c.name !== country.name)
-                    // Store in ref to avoid closure issues
-                    nextCountriesRef.current = updated
-                    console.log('Filtered countries and stored in ref:', updated.length, updated.map(c => c.name))
-                    return updated
-                  })
-                  // Small delay to ensure state updates are processed before starting animation
-                  setTimeout(() => {
-                    animateToCorrect(country.name, () => {
-                      // This callback runs after animation completes
-                      console.log('Animation callback executing, moving to next country')
-                      setQuestionNumber(prevNum => prevNum + 1)
-                      setTranscript("")
-                      setShowAnswer(false)
-                      setIsCorrect(null)
-                      // Get the filtered list from ref (should be set by now)
-                      const countriesToUse = nextCountriesRef.current || []
-                      console.log('Countries to use:', countriesToUse.length, countriesToUse)
-                      // Call selectRandomCountry with the filtered list
-                      selectRandomCountry(countriesToUse)
-                    })
-                  }, 200) // Small delay to ensure showAnswer state is set
-                } else {
-                  // For incorrect answers, just animate (restart listening is handled in animateToCorrect)
-                  setTimeout(() => {
-                    animateToCorrect(country.name)
-                  }, 200) // Increased delay to ensure showAnswer state is set
-                }
-                // For incorrect answers, we'll reset state and restart listening after animation completes
-                // This is handled in the animateToCorrect function
-              }
-              return country
-            })
-          }, 500)
-        } else {
-          setIsListening(false)
+        const detected = event.results?.[0]?.[0]?.transcript?.trim()
+        if (detected) {
+          onSpeechResultRef.current(detected)
         }
       }
 
       recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-        console.error("Speech recognition error:", event.error)
         setIsListening(false)
-        
-        let errorMessage = "Speech recognition error occurred."
+
+        // "aborted" happens whenever we stop listening ourselves, and "no-speech" just restarts
+        if (event.error === "aborted" || event.error === "no-speech") return
+
+        let errorMessage: string
         switch (event.error) {
           case "not-allowed":
-            errorMessage = "Microphone permission denied. Please enable microphone access in your browser settings."
-            break
-          case "no-speech":
-            errorMessage = "No speech detected. Please try again and speak clearly."
+          case "service-not-allowed":
+            errorMessage = "Microphone permission denied. Enable microphone access, or type your answer below."
             break
           case "audio-capture":
-            errorMessage = "No microphone found. Please check your microphone connection."
+            errorMessage = "No microphone found. Check your microphone, or type your answer below."
             break
           case "network":
-            errorMessage = "Network error. Please check your internet connection."
-            break
-          case "aborted":
-            errorMessage = "Speech recognition was aborted."
+            errorMessage = "Network error with voice recognition. Check your connection, or type your answer below."
             break
           default:
             errorMessage = `Speech recognition error: ${event.error}`
+        }
+        if (BLOCKING_SPEECH_ERRORS.includes(event.error)) {
+          setMicBlocked(true)
         }
         setSpeechError(errorMessage)
       }
@@ -266,289 +263,123 @@ export const RandomCountryGame = ({ onGameEnd }: RandomCountryGameProps) => {
       }
 
       recognitionRef.current = recognition
+      setIsSpeechSupported(true)
     } catch (error) {
       console.error("Failed to initialize speech recognition:", error)
       setIsSpeechSupported(false)
-      setSpeechError("Failed to initialize speech recognition. Please refresh the page.")
     }
 
     return () => {
-      if (recognitionRef.current) {
+      const recognition = recognitionRef.current
+      if (recognition) {
+        recognition.onstart = null
+        recognition.onresult = null
+        recognition.onerror = null
+        recognition.onend = null
         try {
-          recognitionRef.current.stop()
-        } catch (error) {
+          recognition.abort()
+        } catch {
           // Ignore errors when stopping
         }
       }
+      recognitionRef.current = null
     }
   }, [])
 
-  // Initialize available countries when difficulty changes
+  // Clear timers, animation and speech on unmount
   useEffect(() => {
-    if (gameStarted) {
-      const countriesByDifficulty = countries.filter(c => c.difficulty === currentDifficulty)
-      if (countriesByDifficulty.length > 0 && availableCountries.length === 0) {
-        setAvailableCountries([...countriesByDifficulty])
-        selectRandomCountry(countriesByDifficulty)
+    return () => {
+      clearPending()
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel()
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentDifficulty, gameStarted])
+  }, [])
 
-  // Auto-restart listening when not listening and game is active
+  // Keep listening while a question is waiting for an answer
   useEffect(() => {
-    // Auto-restart if:
-    // 1. Game is started and we have a country
-    // 2. No answer shown yet (normal case) OR answer is shown but incorrect and animation is done (user can try again)
-    // 3. Not currently listening
-    // 4. No transcript being processed
-    const shouldRestart = gameStarted && 
-      currentCountry && 
-      ((!showAnswer) || (showAnswer && !isCorrect && !isAnimating)) && 
-      !isListening && 
-      !transcript && 
-      isSpeechSupported && 
-      recognitionRef.current
+    const shouldListen =
+      gameStarted &&
+      currentCountry &&
+      !showAnswer &&
+      !isListening &&
+      !isSpeaking &&
+      !micBlocked &&
+      isSpeechSupported
 
-    if (shouldRestart) {
-      // Longer delay if showing incorrect answer (wait for animation to complete)
-      const delay = showAnswer && !isCorrect ? 2500 : 800
-      const timer = setTimeout(() => {
-        // Double-check state hasn't changed before starting
-        if (recognitionRef.current && !isListening && currentCountry) {
-          try {
-            recognitionRef.current.start()
-          } catch (error: any) {
-            // Silently ignore if already started - this is expected in some race conditions
-            if (error?.name !== "InvalidStateError" && !error?.message?.includes("already started")) {
-              // Only log unexpected errors
-            }
-          }
-        }
-      }, delay)
-      return () => clearTimeout(timer)
-    }
-  }, [gameStarted, currentCountry, showAnswer, isListening, transcript, isSpeechSupported, isCorrect, isAnimating])
+    if (!shouldListen) return
 
-  const selectRandomCountry = (countryList: Country[]) => {
-    console.log('selectRandomCountry called with', countryList.length, 'countries')
-    // Stop any ongoing recognition first
-    if (recognitionRef.current) {
+    const timer = setTimeout(() => {
       try {
-        recognitionRef.current.stop()
-      } catch (error) {
-        // Ignore errors when stopping
+        recognitionRef.current?.start()
+      } catch {
+        // Already started - expected in some race conditions
       }
-    }
-    setIsListening(false)
-    
-    if (countryList.length === 0) {
-      // Move to next difficulty if no countries left
-      if (currentDifficulty < 5) {
-        setCurrentDifficulty(prev => {
-          const nextDifficulty = prev + 1
-          const countriesByDifficulty = countries.filter(c => c.difficulty === nextDifficulty)
-          if (countriesByDifficulty.length > 0) {
-            setAvailableCountries([...countriesByDifficulty])
-            const randomIndex = Math.floor(Math.random() * countriesByDifficulty.length)
-            const selected = countriesByDifficulty[randomIndex]
-            setCurrentCountry(selected)
-            const jumbled = jumbleLetters(selected.name)
-            setJumbledLetters(jumbled)
-            setAnimatedLetters(jumbled)
-            setIsAnimating(false)
-            setShowAnswer(false)
-            setIsCorrect(null)
-            setTranscript("")
-            setSpeechError(null)
-            // Auto-start listening for new country
-            setTimeout(() => {
-              if (isSpeechSupported && recognitionRef.current) {
-                startListening()
-              }
-            }, 500)
-          }
-          return nextDifficulty
-        })
-        return
-      } else {
-        // Game complete
-        setCurrentCountry(null)
-        if (onGameEnd) {
-          onGameEnd()
-        }
-        return
-      }
-    }
-
-    const randomIndex = Math.floor(Math.random() * countryList.length)
-    const selected = countryList[randomIndex]
-    console.log('Selecting new country:', selected.name)
-    setCurrentCountry(selected)
-    const jumbled = jumbleLetters(selected.name)
-    setJumbledLetters(jumbled)
-    setAnimatedLetters(jumbled)
-    setIsAnimating(false)
-    setShowAnswer(false)
-    setIsCorrect(null)
-    setTranscript("")
-    setShowManualAnswer(false)
-    setSpeechError(null)
-    // Update available countries to match the list we're using
-    setAvailableCountries(countryList)
-    // Auto-start listening for new country
-    setTimeout(() => {
-      if (isSpeechSupported && recognitionRef.current) {
-        startListening()
-      }
-    }, 500)
-  }
-
-  const checkAnswer = (userAnswer: string) => {
-    if (!currentCountry) {
-      return
-    }
-
-    // Clean the user answer - remove quotes, periods, and extra whitespace
-    const cleanedAnswer = userAnswer
-      .trim()
-      .replace(/^["']|["']$/g, "") // Remove surrounding quotes
-      .replace(/\.$/, "") // Remove trailing period
-      .trim()
-
-    const correct = checkCountryAnswer(cleanedAnswer, currentCountry)
-    
-    // Update state immediately
-    setIsCorrect(correct)
-    setShowAnswer(true)
-    
-    // Start animation when showing answer (with a small delay to ensure state is set)
-    setTimeout(() => {
-      if (currentCountry) {
-        animateToCorrect(currentCountry.name)
-      }
-    }, 100)
-
-    if (correct) {
-      setScore(prev => prev + 1)
-      // Remove the country from available list and get updated list
-      setAvailableCountries(prev => {
-        const updated = prev.filter(c => c.name !== currentCountry.name)
-        
-        // Auto-advance after 2 seconds
-        setTimeout(() => {
-          setQuestionNumber(prevNum => prevNum + 1)
-          setTranscript("") // Clear transcript for next question
-          selectRandomCountry(updated)
-          // Auto-start listening for next question
-          setTimeout(() => {
-            if (isSpeechSupported && recognitionRef.current && !isListening) {
-              startListening()
-            }
-          }, 300)
-        }, 2000)
-        
-        return updated
-      })
-    }
-  }
+    }, 600)
+    return () => clearTimeout(timer)
+  }, [gameStarted, currentCountry, showAnswer, isListening, isSpeaking, micBlocked, isSpeechSupported])
 
   const startListening = () => {
-    if (!isSpeechSupported) {
-      setSpeechError("Speech recognition is not supported in your browser.")
-      return
-    }
-
-    if (!recognitionRef.current) {
-      setSpeechError("Speech recognition is not initialized. Please refresh the page.")
-      return
-    }
-
-    if (isListening) {
-      return
-    }
-
+    if (!recognitionRef.current || isListening) return
+    setMicBlocked(false)
+    setSpeechError(null)
     try {
-      setSpeechError(null)
       recognitionRef.current.start()
     } catch (error: any) {
-      // Silently handle "already started" errors - this is expected in some cases
-      if (error?.name === "InvalidStateError" || error?.message?.includes("already started")) {
-        // Recognition is already running, which is fine
-        return
+      if (error?.name !== "InvalidStateError") {
+        setSpeechError("Failed to start voice recognition. Please try again.")
       }
-      // Only show error for unexpected errors
-      setSpeechError("Failed to start voice recognition. Please try again.")
     }
-  }
-
-  const stopListening = () => {
-    if (recognitionRef.current && isListening) {
-      recognitionRef.current.stop()
-    }
-  }
-
-  const handleNext = () => {
-    setQuestionNumber(prev => prev + 1)
-    setTranscript("") // Clear transcript for next question
-    setShowManualAnswer(false)
-    setAvailableCountries(prev => {
-      const updated = prev.filter(c => currentCountry && c.name !== currentCountry.name)
-      selectRandomCountry(updated)
-      // Auto-restart listening for next question
-      setTimeout(() => {
-        if (isSpeechSupported && recognitionRef.current && !isListening) {
-          startListening()
-        }
-      }, 500)
-      return updated
-    })
   }
 
   const handleShowAnswer = () => {
-    if (!currentCountry) return
-    
+    if (!currentCountry || showAnswer) return
+
+    const country = currentCountry
+    const pool = availableCountries
+    const difficulty = currentDifficulty
+
+    stopListening()
     setShowManualAnswer(true)
-    setIsCorrect(false) // Mark as incorrect since they're using manual override
+    setIsCorrect(false)
     setShowAnswer(true)
-    stopListening() // Stop listening when showing answer
-    
-    // Start animation and proceed to next country after animation completes
-    animateToCorrect(currentCountry.name, () => {
-      // This callback runs after animation completes
-      setQuestionNumber(prev => prev + 1)
-      setTranscript("")
-      setShowManualAnswer(false)
-      setAvailableCountries(prev => {
-        const updated = prev.filter(c => currentCountry && c.name !== currentCountry.name)
-        selectRandomCountry(updated)
-        return updated
-      })
+    setTranscript("")
+
+    animateToCorrect(jumbledLetters, country.name, () => {
+      schedule(() => advance(country, pool, difficulty), 2000)
     })
   }
 
   const startGame = () => {
     setGameStarted(true)
-    setCurrentDifficulty(1)
     setScore(0)
     setQuestionNumber(1)
-    const countriesByDifficulty = countries.filter(c => c.difficulty === 1)
-    setAvailableCountries([...countriesByDifficulty])
-    selectRandomCountry(countriesByDifficulty)
-    // Auto-start listening when game starts (with delay to ensure recognition is ready)
-    setTimeout(() => {
-      if (isSpeechSupported && recognitionRef.current) {
-        startListening()
-      }
-    }, 800)
+    loadQuestion(countriesForDifficulty(1), 1)
+  }
+
+  const resetGame = () => {
+    clearPending()
+    stopListening()
+    setGameStarted(false)
+    setCurrentCountry(null)
+    setScore(0)
+    setQuestionNumber(0)
+    setCurrentDifficulty(1)
   }
 
   const speakCountry = () => {
-    if (currentCountry && "speechSynthesis" in window) {
-      const utterance = new SpeechSynthesisUtterance(currentCountry.name)
-      utterance.lang = "en-US"
-      window.speechSynthesis.speak(utterance)
-    }
+    if (!currentCountry || !("speechSynthesis" in window)) return
+
+    // Pause the mic so it doesn't hear the spoken name as an answer
+    stopListening()
+    window.speechSynthesis.cancel()
+    const utterance = new SpeechSynthesisUtterance(currentCountry.name)
+    utterance.lang = "en-US"
+    utterance.onend = () => setIsSpeaking(false)
+    utterance.onerror = () => setIsSpeaking(false)
+    setIsSpeaking(true)
+    window.speechSynthesis.speak(utterance)
   }
 
   if (!gameStarted) {
@@ -557,7 +388,7 @@ export const RandomCountryGame = ({ onGameEnd }: RandomCountryGameProps) => {
         <CardHeader className="text-center">
           <CardTitle className="text-3xl">Random Country Game</CardTitle>
           <CardDescription className="text-lg">
-            Test your geography knowledge! Answer the country names using your voice.
+            Test your geography knowledge! Answer the country names using your voice or by typing.
             Start with the easiest countries and progress to harder ones.
           </CardDescription>
         </CardHeader>
@@ -581,33 +412,21 @@ export const RandomCountryGame = ({ onGameEnd }: RandomCountryGameProps) => {
         </CardHeader>
         <CardContent className="flex flex-col items-center gap-4">
           <div className="flex gap-2 w-full">
-            <Button 
-              onClick={() => {
-                setGameStarted(false)
-                setCurrentCountry(null)
-                setScore(0)
-                setQuestionNumber(0)
-                setCurrentDifficulty(1)
-              }} 
-              size="lg" 
-              className="flex-1"
-            >
+            <Button onClick={resetGame} size="lg" className="flex-1">
               Play Again
             </Button>
-            {onGameEnd ? (
-              <Button onClick={onGameEnd} size="lg" variant="outline" className="flex-1">
-                Back to Games
-              </Button>
-            ) : (
-              <Button onClick={() => router.push("/games")} size="lg" variant="outline" className="flex-1">
-                Back to Games
-              </Button>
-            )}
+            <Button onClick={onGameEnd ?? (() => router.push("/games"))} size="lg" variant="outline" className="flex-1">
+              Back to Games
+            </Button>
           </div>
         </CardContent>
       </Card>
     )
   }
+
+  const correctOrder = toLetters(currentCountry.name)
+  const displayedLetters = showAnswer && animatedLetters.length > 0 ? animatedLetters : jumbledLetters
+  const isWrongAnswer = showAnswer && isCorrect === false && !showManualAnswer
 
   return (
     <Card className="w-full max-w-2xl mx-auto">
@@ -618,7 +437,7 @@ export const RandomCountryGame = ({ onGameEnd }: RandomCountryGameProps) => {
             <p className="text-sm text-muted-foreground">Score: {score}</p>
           </div>
           <div className="text-right">
-            <p className="text-sm text-muted-foreground">Difficulty: {currentDifficulty}/5</p>
+            <p className="text-sm text-muted-foreground">Difficulty: {currentDifficulty}/{MAX_DIFFICULTY}</p>
             <p className="text-sm text-muted-foreground">
               Remaining: {availableCountries.length}
             </p>
@@ -632,28 +451,26 @@ export const RandomCountryGame = ({ onGameEnd }: RandomCountryGameProps) => {
             Unscramble the letters to find the country:
           </p>
           <div className="flex flex-wrap justify-center gap-2 max-w-lg">
-            {(!showAnswer ? jumbledLetters : animatedLetters.length > 0 ? animatedLetters : jumbledLetters).map((letter, index) => {
-              const correctOrder = currentCountry.name.replace(/\s+/g, "").toUpperCase().split("")
-              const isInCorrectPosition = showAnswer && !isAnimating && animatedLetters.length > 0 && animatedLetters[index] === correctOrder[index]
-              
+            {displayedLetters.map((letter, index) => {
+              const isSolved = showAnswer && !isAnimating && animatedLetters[index] === correctOrder[index]
+
               return (
                 <Badge
-                  key={`jumbled-${letter}-${index}`}
+                  key={`letter-${index}`}
                   variant="outline"
                   className={cn(
                     "font-bold px-4 py-2 min-w-[3rem] text-center border-2 transition-all duration-300",
                     letterSize === "large" ? "text-4xl min-w-[4rem] px-6 py-4" : "text-2xl",
-                    showAnswer && isInCorrectPosition && isCorrect
+                    isSolved && isCorrect
                       ? "bg-green-500/20 border-green-500 text-green-700 dark:text-green-400 scale-110"
+                      : isSolved && showManualAnswer
+                      ? "bg-blue-500/20 border-blue-500 text-blue-700 dark:text-blue-400"
                       : showAnswer && isAnimating
                       ? "bg-accent/20 border-accent/50 animate-pulse"
-                      : showAnswer && !isCorrect && !isAnimating
+                      : isWrongAnswer
                       ? "bg-red-500/20 border-red-500 text-red-700 dark:text-red-400"
                       : "bg-secondary border-accent/30 hover:border-accent/50"
                   )}
-                  style={{
-                    transition: "all 0.3s ease-in-out",
-                  }}
                 >
                   {letter}
                 </Badge>
@@ -665,7 +482,7 @@ export const RandomCountryGame = ({ onGameEnd }: RandomCountryGameProps) => {
           </p>
         </div>
 
-        {transcript && !showManualAnswer && showAnswer && (
+        {transcript && showAnswer && !showManualAnswer && (
           <div className="w-full p-3 bg-muted/50 border border-border rounded-lg">
             <p className="text-sm text-muted-foreground text-center">
               You said: <span className="font-medium text-foreground">"{transcript}"</span>
@@ -673,15 +490,23 @@ export const RandomCountryGame = ({ onGameEnd }: RandomCountryGameProps) => {
           </div>
         )}
 
-        {showManualAnswer && (
-          <div className="w-full p-3 bg-blue-50 dark:bg-blue-950 border border-blue-500 rounded-lg">
-            <p className="text-sm text-blue-600 dark:text-blue-400 text-center">
-              Answer revealed. Moving to next question in 3 seconds...
+        {isWrongAnswer && (
+          <div className="w-full p-3 bg-red-50 dark:bg-red-950 border border-red-500 rounded-lg">
+            <p className="text-sm text-red-600 dark:text-red-400 text-center font-medium">
+              Not quite. Try again!
             </p>
           </div>
         )}
 
-        {showAnswer && isCorrect && !showManualAnswer && (
+        {showManualAnswer && (
+          <div className="w-full p-3 bg-blue-50 dark:bg-blue-950 border border-blue-500 rounded-lg">
+            <p className="text-sm text-blue-600 dark:text-blue-400 text-center">
+              Answer revealed. Moving to next question...
+            </p>
+          </div>
+        )}
+
+        {showAnswer && isCorrect && (
           <div className="w-full p-3 bg-green-50 dark:bg-green-950 border border-green-500 rounded-lg">
             <p className="text-sm text-green-600 dark:text-green-400 text-center font-medium">
               ✓ Correct! Moving to next question...
@@ -694,7 +519,7 @@ export const RandomCountryGame = ({ onGameEnd }: RandomCountryGameProps) => {
             {!isSpeechSupported && (
               <div className="w-full p-3 bg-yellow-50 dark:bg-yellow-950 border border-yellow-500 rounded-lg">
                 <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                  ⚠️ Speech recognition is not supported in your browser. Please use Chrome, Edge, or Safari.
+                  ⚠️ Voice answers aren't supported in this browser (try Chrome, Edge, or Safari). You can type your answer instead.
                 </p>
               </div>
             )}
@@ -706,11 +531,12 @@ export const RandomCountryGame = ({ onGameEnd }: RandomCountryGameProps) => {
               </div>
             )}
             {isListening && (
-              <div className="flex justify-center">
+              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
                 <Mic className="h-6 w-6 text-orange-500 animate-pulse" />
+                Listening...
               </div>
             )}
-            {!isListening && !showAnswer && isSpeechSupported && transcript === "" && (
+            {!isListening && isSpeechSupported && micBlocked && (
               <Button
                 onClick={startListening}
                 size="lg"
@@ -721,39 +547,35 @@ export const RandomCountryGame = ({ onGameEnd }: RandomCountryGameProps) => {
                 Start Listening Again
               </Button>
             )}
-            
-            {/* Show detected speech text - only show if answer hasn't been processed yet */}
-            {transcript && !showAnswer && (
-              <div className="w-full p-4 bg-accent/10 border border-accent/30 rounded-lg">
-                <p className="text-sm text-muted-foreground mb-1">Detected:</p>
-                <p className="text-lg font-semibold text-foreground">
-                  "{transcript}"
-                </p>
-                <p className="text-xs text-muted-foreground mt-2 animate-pulse">
-                  Processing your answer...
-                </p>
-              </div>
-            )}
-            
-            {/* Show Answer button for manual override */}
-            {!showAnswer && (
-              <Button
-                onClick={handleShowAnswer}
-                size="lg"
-                variant="outline"
-                className="w-full border-dashed"
-              >
-                Show Answer
-              </Button>
-            )}
-          </div>
-        )}
 
-        {showAnswer && !isCorrect && !showManualAnswer && (
-          <Button onClick={handleNext} size="lg" className="w-full" variant="outline">
-            <ArrowRight className="mr-2 h-5 w-5" />
-            Next Question
-          </Button>
+            <form
+              className="flex w-full gap-2"
+              onSubmit={(e) => {
+                e.preventDefault()
+                submitAnswer(typedAnswer)
+              }}
+            >
+              <Input
+                value={typedAnswer}
+                onChange={(e) => setTypedAnswer(e.target.value)}
+                placeholder="Or type your answer"
+                aria-label="Your answer"
+                autoComplete="off"
+              />
+              <Button type="submit" disabled={!typedAnswer.trim()}>
+                Check
+              </Button>
+            </form>
+
+            <Button
+              onClick={handleShowAnswer}
+              size="lg"
+              variant="outline"
+              className="w-full border-dashed"
+            >
+              Show Answer
+            </Button>
+          </div>
         )}
 
         <div className="flex justify-center gap-2">
@@ -803,8 +625,10 @@ interface SpeechRecognition extends EventTarget {
   continuous: boolean
   interimResults: boolean
   lang: string
+  maxAlternatives: number
   start(): void
   stop(): void
+  abort(): void
   onstart: ((this: SpeechRecognition, ev: Event) => any) | null
   onresult: ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => any) | null
   onerror: ((this: SpeechRecognition, ev: SpeechRecognitionErrorEvent) => any) | null
@@ -834,4 +658,3 @@ interface SpeechRecognitionAlternative {
   transcript: string
   confidence: number
 }
-

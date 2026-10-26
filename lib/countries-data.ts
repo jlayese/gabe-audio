@@ -136,37 +136,40 @@ export const getCountriesByDifficulty = (difficulty: number): Country[] => {
   return countries.filter(country => country.difficulty === difficulty)
 }
 
-// Helper function to check if an answer matches a country
-export const checkCountryAnswer = (userAnswer: string, country: Country): boolean => {
-  // Remove quotes, extra whitespace, and normalize
-  const normalizedUserAnswer = userAnswer
-    .trim()
-    .replace(/^["']|["']$/g, "") // Remove surrounding quotes
-    .replace(/\s+/g, " ") // Normalize whitespace
+// Lowercase, strip accents and punctuation, and collapse whitespace
+const normalizeAnswer = (text: string): string =>
+  text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[.'’]/g, "")
+    .replace(/[^a-z]+/g, " ")
     .trim()
-  
-  const normalizedCountryName = country.name.toLowerCase()
-  
-  // Check exact match
-  if (normalizedUserAnswer === normalizedCountryName) {
-    return true
-  }
-  
-  // Check alternative names
-  if (country.alternativeNames) {
-    for (const altName of country.alternativeNames) {
-      if (normalizedUserAnswer === altName.toLowerCase()) {
-        return true
+
+// Filler words speech recognition often adds around the actual answer
+const FILLER_PREFIXES = ["i think its", "i think it is", "its", "it is", "is it", "the answer is", "answer", "the"]
+
+const stripFiller = (text: string): string => {
+  let result = text
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const prefix of FILLER_PREFIXES) {
+      if (result.startsWith(prefix + " ")) {
+        result = result.slice(prefix.length + 1)
+        changed = true
       }
     }
   }
-  
-  // Check if user answer contains the country name or vice versa (for partial matches)
-  if (normalizedUserAnswer.includes(normalizedCountryName) || normalizedCountryName.includes(normalizedUserAnswer)) {
-    return true
-  }
-  
-  return false
+  return result
 }
 
+// Helper function to check if an answer matches a country
+export const checkCountryAnswer = (userAnswer: string, country: Country): boolean => {
+  const normalized = normalizeAnswer(userAnswer)
+  if (!normalized) return false
+
+  const accepted = [country.name, ...(country.alternativeNames ?? [])].map(normalizeAnswer)
+  return accepted.includes(normalized) || accepted.includes(stripFiller(normalized))
+}
