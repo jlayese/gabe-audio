@@ -19,6 +19,9 @@ const MAX_DIFFICULTY = 5
 // Speech errors that mean the mic can't be used, so we stop auto-restarting it
 const BLOCKING_SPEECH_ERRORS = ["not-allowed", "service-not-allowed", "audio-capture", "network"]
 
+const MIC_BLOCKED_MESSAGE =
+  "Microphone is blocked. Click the icon at the left of the address bar, allow Microphone, then press Start Listening Again. If it's already allowed, check your computer's microphone privacy settings. You can also type your answer below."
+
 const toLetters = (text: string): string[] => text.replace(/[^A-Za-z]/g, "").toUpperCase().split("")
 
 // Fisher-Yates shuffle, retried so the letters don't come out already solved
@@ -55,6 +58,7 @@ export const RandomCountryGame = ({ onGameEnd }: RandomCountryGameProps) => {
   const [jumbledLetters, setJumbledLetters] = useState<string[]>([])
   const [isSpeechSupported, setIsSpeechSupported] = useState(false)
   const [micBlocked, setMicBlocked] = useState(false)
+  const [micReady, setMicReady] = useState(false)
   const [speechError, setSpeechError] = useState<string | null>(null)
   const [showManualAnswer, setShowManualAnswer] = useState(false)
   const [animatedLetters, setAnimatedLetters] = useState<string[]>([])
@@ -241,7 +245,7 @@ export const RandomCountryGame = ({ onGameEnd }: RandomCountryGameProps) => {
         switch (event.error) {
           case "not-allowed":
           case "service-not-allowed":
-            errorMessage = "Microphone permission denied. Enable microphone access, or type your answer below."
+            errorMessage = MIC_BLOCKED_MESSAGE
             break
           case "audio-capture":
             errorMessage = "No microphone found. Check your microphone, or type your answer below."
@@ -306,6 +310,7 @@ export const RandomCountryGame = ({ onGameEnd }: RandomCountryGameProps) => {
       !isListening &&
       !isSpeaking &&
       !micBlocked &&
+      micReady &&
       isSpeechSupported
 
     if (!shouldListen) return
@@ -318,12 +323,35 @@ export const RandomCountryGame = ({ onGameEnd }: RandomCountryGameProps) => {
       }
     }, 600)
     return () => clearTimeout(timer)
-  }, [gameStarted, currentCountry, showAnswer, isListening, isSpeaking, micBlocked, isSpeechSupported])
+  }, [gameStarted, currentCountry, showAnswer, isListening, isSpeaking, micBlocked, micReady, isSpeechSupported])
 
-  const startListening = () => {
+  // Ask for the mic once up front (from a click), so the browser shows its permission prompt
+  // before speech recognition starts and stops in the background
+  const requestMicAccess = async (): Promise<boolean> => {
+    if (!navigator.mediaDevices?.getUserMedia) return true
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      stream.getTracks().forEach(track => track.stop())
+      setMicBlocked(false)
+      setSpeechError(null)
+      setMicReady(true)
+      return true
+    } catch (error: any) {
+      setMicBlocked(true)
+      setSpeechError(
+        error?.name === "NotFoundError"
+          ? "No microphone found. Check your microphone, or type your answer below."
+          : MIC_BLOCKED_MESSAGE
+      )
+      return false
+    }
+  }
+
+  const startListening = async () => {
     if (!recognitionRef.current || isListening) return
-    setMicBlocked(false)
-    setSpeechError(null)
+    if (!(await requestMicAccess())) return
+
     try {
       recognitionRef.current.start()
     } catch (error: any) {
@@ -356,6 +384,9 @@ export const RandomCountryGame = ({ onGameEnd }: RandomCountryGameProps) => {
     setScore(0)
     setQuestionNumber(1)
     loadQuestion(countriesForDifficulty(1), 1)
+    if (isSpeechSupported && !micReady) {
+      requestMicAccess()
+    }
   }
 
   const resetGame = () => {
